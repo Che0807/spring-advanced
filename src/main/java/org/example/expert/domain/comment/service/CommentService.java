@@ -23,14 +23,20 @@ import java.util.List;
 @RequiredArgsConstructor
 public class CommentService {
 
+    private static final String TODO_NOT_FOUND_MSG = "Todo not found";
+
     private final TodoRepository todoRepository;
     private final CommentRepository commentRepository;
 
     @Transactional
     public CommentSaveResponse saveComment(AuthUser authUser, long todoId, CommentSaveRequest commentSaveRequest) {
+        if (commentSaveRequest.getContents() == null || commentSaveRequest.getContents().isBlank()) {
+            throw new InvalidRequestException("댓글 내용이 비어있습니다.");
+        }
+
         User user = User.fromAuthUser(authUser);
-        Todo todo = todoRepository.findById(todoId).orElseThrow(() ->
-                new ServerException("Todo not found"));
+        Todo todo = todoRepository.findById(todoId)
+                .orElseThrow(() -> new InvalidRequestException(TODO_NOT_FOUND_MSG));
 
         Comment newComment = new Comment(
                 commentSaveRequest.getContents(),
@@ -49,18 +55,13 @@ public class CommentService {
 
     @Transactional(readOnly = true)
     public List<CommentResponse> getComments(long todoId) {
-        List<Comment> commentList = commentRepository.findByTodoIdWithUser(todoId);
-
-        List<CommentResponse> dtoList = new ArrayList<>();
-        for (Comment comment : commentList) {
-            User user = comment.getUser();
-            CommentResponse dto = new CommentResponse(
-                    comment.getId(),
-                    comment.getContents(),
-                    new UserResponse(user.getId(), user.getEmail())
-            );
-            dtoList.add(dto);
-        }
-        return dtoList;
+        return commentRepository.findByTodoIdWithUser(todoId).stream()
+                .map(comment -> new CommentResponse(
+                        comment.getId(),
+                        comment.getContents(),
+                        new UserResponse(comment.getUser().getId(), comment.getUser().getEmail())
+                ))
+                .toList();
     }
 }
+
